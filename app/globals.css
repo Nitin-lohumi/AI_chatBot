@@ -24,3 +24,32 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-hide {
+  -ms-overflow-style: none; 
+  scrollbar-width: none;  
+}
+
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.chat-animate {
+  animation: fadeUp 0.35s ease forwards;
+}
+
+.glass {
+  backdrop-filter: blur(12px);
+  background: rgba(30,30,30,0.5);
+  border: 1px solid rgba(255,255,255,0.05);
+}
