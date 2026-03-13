@@ -1,9 +1,11 @@
-// Uses HuggingFace Inference API instead of local Xenova model
-// Works on Render, Vercel, any cloud — no local model download needed
-
 const HF_API_URL =
   "https://router.huggingface.co/hf-inference/models/sentence-transformers/all-MiniLM-L6-v2/pipeline/feature-extraction";
 const HF_TOKEN = process.env.HUGGINGFACE_API_TOKEN!;
+
+function normalize(vec: number[]): number[] {
+  const norm = Math.sqrt(vec.reduce((sum, v) => sum + v * v, 0));
+  return norm === 0 ? vec : vec.map((v) => v / norm);
+}
 
 async function embedText(text: string): Promise<number[]> {
   const res = await fetch(HF_API_URL, {
@@ -12,7 +14,10 @@ async function embedText(text: string): Promise<number[]> {
       Authorization: `Bearer ${HF_TOKEN}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ inputs: text }),
+    body: JSON.stringify({
+      inputs: text,
+      options: { wait_for_model: true },
+    }),
   });
 
   if (!res.ok) {
@@ -22,12 +27,23 @@ async function embedText(text: string): Promise<number[]> {
 
   const data = await res.json();
 
-  // HF returns nested array for sentence transformers — flatten if needed
-  if (Array.isArray(data[0])) {
-    // Batch or nested — take first
-    return data[0] as number[];
+  let vector: number[];
+
+  if (typeof data[0] === "number") {
+    vector = data as number[];
+  } else if (Array.isArray(data[0])) {
+    const tokenVecs = data as number[][];
+    const dim = tokenVecs[0].length;
+    const mean = new Array(dim).fill(0);
+    for (const vec of tokenVecs) {
+      for (let i = 0; i < dim; i++) mean[i] += vec[i];
+    }
+    vector = mean.map((v) => v / tokenVecs.length);
+  } else {
+    throw new Error(`Unknown HF response shape`);
   }
-  return data as number[];
+
+  return normalize(vector);
 }
 
 export const embeddings = {
