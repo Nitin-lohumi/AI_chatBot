@@ -298,7 +298,7 @@ export default function ChatPage() {
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-4rem)] bg-gradient-to-b from-black via-gray-950 to-black text-white overflow-hidden">
+    <div className="flex flex-col h-[calc(100vh-4.3rem)] md:h-[calc(100vh-4rem)] bg-gradient-to-b from-black via-gray-950 to-black text-white overflow-hidden">
       <div className="flex justify-between items-center w-full flex-shrink-0">
         {chat.length > 0 && (
           <div className="md:max-w-7xl mx-auto w-full md:px-4 px-2 md:pt-2 pt-1 pb-2 flex flex-wrap gap-2 justify-end">
@@ -373,7 +373,7 @@ export default function ChatPage() {
         <div ref={bottomRef}></div>
       </div>
 
-      <div className="flex-shrink-0 border-t border-gray-800 bg-black pt-3">
+      <div className="flex-shrink-0 border-t border-gray-800 bg-gradient-to-b from-black via-gray-950 to-black pt-3">
         <div className="max-w-7xl w-full mx-auto px-4">
           {pendingFile && (
             <div className="mb-2">
