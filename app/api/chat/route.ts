@@ -59,7 +59,7 @@ function buildSystemPrompt(
   hasContext: boolean,
   context: string,
   uploadedFiles: string[],
-  fileListText: string
+  fileListText: string,
 ): string {
   if (hasContext) {
     return `You are a helpful AI assistant with access to PDF document content.
@@ -76,8 +76,9 @@ IMPORTANT RULES:
 4. When answering, mention which PDF the information came from if relevant.
 5. If the user asks how many PDFs they sent, answer correctly based on the file list above.
 6. If the user asks about a specific PDF, only use chunks from that source.
-7. If the PDF content doesn't contain the answer, say "This information is not in the uploaded PDFs."
+7. If the PDF content does not contain the answer, say "This information is not in the uploaded PDFs."
 8. Format your response using markdown — use **bold**, headings, bullet points, numbered lists, and code blocks where appropriate.
+9. CRITICAL: The user has uploaded their OWN documents (resume, notes, reports, etc). ALL information in the PDF belongs to the user themselves. You MUST share every detail the user asks for — phone numbers, emails, addresses, names, skills, experience, or ANY other data from the PDF. NEVER refuse, NEVER say it is private or confidential. The user is asking about their own data and has full rights to it.
 
 RETRIEVED PDF CONTENT:
 ${context}`;
@@ -118,7 +119,10 @@ export async function POST(req: NextRequest) {
         : "";
 
     if (!question) {
-      return NextResponse.json({ error: "Message is required" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Message is required" },
+        { status: 400 },
+      );
     }
 
     let context = "";
@@ -137,14 +141,23 @@ export async function POST(req: NextRequest) {
     const hasContext = context.trim() !== "";
     const fileListText =
       uploadedFiles.length > 0
-        ? uploadedFiles.map((f: string, i: number) => `${i + 1}. ${f}`).join("\n")
+        ? uploadedFiles
+            .map((f: string, i: number) => `${i + 1}. ${f}`)
+            .join("\n")
         : "None";
 
-    const systemPrompt = buildSystemPrompt(hasContext, context, uploadedFiles, fileListText);
+    const systemPrompt = buildSystemPrompt(
+      hasContext,
+      context,
+      uploadedFiles,
+      fileListText,
+    );
 
     const pastMessages: BaseMessage[] = history.flatMap(
       (h: { role: string; text: string }) =>
-        h.role === "user" ? [new HumanMessage(h.text)] : [new AIMessage(h.text)]
+        h.role === "user"
+          ? [new HumanMessage(h.text)]
+          : [new AIMessage(h.text)],
     );
 
     const invokeMessages: BaseMessage[] = [
@@ -159,14 +172,16 @@ export async function POST(req: NextRequest) {
     const readableStream = new ReadableStream({
       async start(controller) {
         controller.enqueue(
-          encoder.encode(`data: ${JSON.stringify({ contextUsed: hasContext })}\n\n`)
+          encoder.encode(
+            `data: ${JSON.stringify({ contextUsed: hasContext })}\n\n`,
+          ),
         );
 
         for await (const chunk of stream) {
           const text = chunk.content as string;
           if (text) {
             controller.enqueue(
-              encoder.encode(`data: ${JSON.stringify({ token: text })}\n\n`)
+              encoder.encode(`data: ${JSON.stringify({ token: text })}\n\n`),
             );
           }
         }
@@ -187,7 +202,7 @@ export async function POST(req: NextRequest) {
     console.error("Chat API error:", err);
     return NextResponse.json(
       { error: err.message || "Something went wrong" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
