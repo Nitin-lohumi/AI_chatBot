@@ -3,8 +3,7 @@ import { v4 as uuid } from "uuid";
 import { qdrant, ensureCollection } from "@/lib/Qdrantdb_config";
 import { embeddings } from "@/lib/embeddings";
 import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
-import pdfParse from "pdf-parse/lib/pdf-parse.js";
-
+import pdfParse from "pdf-parse";
 export async function POST(req: NextRequest) {
   try {
     const data = await req.formData();
@@ -15,10 +14,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (!file.name.endsWith(".pdf")) {
-      return NextResponse.json(
-        { error: "Only PDF files allowed" },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "Only PDF files allowed" }, { status: 400 });
     }
 
     console.log(`📄 Processing: ${file.name}`);
@@ -27,10 +23,7 @@ export async function POST(req: NextRequest) {
     const parsed = await pdfParse(buffer);
 
     if (!parsed.text?.trim()) {
-      return NextResponse.json(
-        { error: "PDF has no readable text" },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "PDF has no readable text" }, { status: 400 });
     }
 
     const splitter = new RecursiveCharacterTextSplitter({
