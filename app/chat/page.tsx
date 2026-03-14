@@ -8,12 +8,23 @@ import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { FaRegCopy } from "react-icons/fa";
 import { FaCopy } from "react-icons/fa6";
+
 type Chat = {
   role: "user" | "ai";
   text: string;
   attachedFile?: string;
   contextUsed?: boolean;
 };
+
+function getOrCreateSessionId(): string {
+  if (typeof window === "undefined") return crypto.randomUUID();
+  let id = localStorage.getItem("chatSessionId");
+  if (!id) {
+    id = crypto.randomUUID();
+    localStorage.setItem("chatSessionId", id);
+  }
+  return id;
+}
 
 function CopyButton({ code }: { code: string }) {
   const [copied, setCopied] = useState(false);
@@ -111,10 +122,15 @@ export default function ChatPage() {
   const [uploadedFiles, setUploadedFiles] = useState<string[]>([]);
   const [error, setError] = useState("");
   const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [sessionId, setSessionId] = useState<string>("");
 
   const hasLoadedRef = useRef(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const chatRef = useRef<Chat[]>([]);
+
+  useEffect(() => {
+    setSessionId(getOrCreateSessionId());
+  }, []);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -140,6 +156,7 @@ export default function ChatPage() {
     setError("");
     const formData = new FormData();
     formData.append("file", file);
+    formData.append("sessionId", sessionId);
     try {
       const res = await fetch("/api/upload", {
         method: "POST",
@@ -158,22 +175,26 @@ export default function ChatPage() {
   };
 
   const sendMessage = async () => {
-    if ((!message.trim() && !pendingFile) || loading) return;
+    if ((!message.trim() && !pendingFile) || loading || !sessionId) return;
+
     const userMessage = message.trim();
+    const fileToUpload = pendingFile;
+
     setMessage("");
     setError("");
-
-    const fileToUpload = pendingFile;
     if (pendingFile) setPendingFile(null);
+
     const userBubble: Chat = {
       role: "user",
       text: userMessage,
       attachedFile: fileToUpload?.name,
     };
+
     const historyBeforeThisMessage = [...chatRef.current];
     chatRef.current = [...chatRef.current, userBubble];
     setChat([...chatRef.current]);
     setLoading(true);
+
     let uploadedFileName: string | undefined;
     if (fileToUpload) {
       const success = await uploadFileToServer(fileToUpload);
@@ -182,7 +203,7 @@ export default function ChatPage() {
       } else {
         chatRef.current = [
           ...chatRef.current,
-          { role: "ai", text: "❌ PDF upload failed. Please try again." },
+          { role: "ai", text: " PDF upload failed. Please try again." },
         ];
         setChat([...chatRef.current]);
         setLoading(false);
@@ -207,11 +228,11 @@ export default function ChatPage() {
             (uploadedFileName
               ? `I have uploaded a PDF: ${uploadedFileName}. Please analyze it.`
               : ""),
-          pdfUploaded: !!uploadedFileName,
-          fileName: uploadedFileName,
+          sessionId,
           uploadedFiles: uploadedFileName
             ? [...uploadedFiles, uploadedFileName]
             : uploadedFiles,
+          currentFile: uploadedFileName || null, 
           history: historyBeforeThisMessage.slice(-10),
         }),
       });
@@ -236,15 +257,12 @@ export default function ChatPage() {
           if (!line.startsWith("data: ")) continue;
           const raw = line.slice(6).trim();
           if (raw === "[DONE]") break;
-
           try {
             const parsed = JSON.parse(raw);
-            if (parsed.contextUsed !== undefined) {
+            if (parsed.contextUsed !== undefined)
               contextUsed = parsed.contextUsed;
-            }
             if (parsed.token) {
               streamedText += parsed.token;
-              // Update the AI bubble in place
               chatRef.current = chatRef.current.map((msg, i) =>
                 i === aiIndex
                   ? { ...msg, text: streamedText, contextUsed }
@@ -284,17 +302,24 @@ export default function ChatPage() {
   };
 
   const startNewChat = async () => {
+    if (sessionId) {
+      await fetch("/api/clear-context", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId }),
+      }).catch(() => {});
+    }
+
+    const newId = crypto.randomUUID();
+    localStorage.setItem("chatSessionId", newId);
+    setSessionId(newId);
+
     chatRef.current = [];
     setChat([]);
     setUploadedFiles([]);
     setPendingFile(null);
     setError("");
     localStorage.removeItem("chat_history");
-    try {
-      await fetch("/api/clear-context", { method: "POST" });
-    } catch (err) {
-      console.error("Error clearing Qdrant context:", err);
-    }
   };
 
   return (
@@ -329,7 +354,7 @@ export default function ChatPage() {
               className={`rounded-2xl max-w-[80%] text-sm leading-relaxed overflow-hidden ${
                 msg.role === "user"
                   ? "bg-blue-600 text-white rounded-br-sm"
-                  : "bg-gray-800 text-gray-100 rounded-bl-sm"
+                  : "text-gray-100 rounded-bl-sm"
               }`}
             >
               {msg.attachedFile && (
@@ -340,21 +365,17 @@ export default function ChatPage() {
                   </span>
                 </div>
               )}
-
               {msg.role === "user" && msg.text && (
                 <div className="px-4 py-3">{msg.text}</div>
               )}
-
               {msg.role === "ai" && msg.text && (
                 <div className="px-4 py-3 prose prose-invert prose-sm max-w-none">
                   <MarkdownMessage text={msg.text} />
                 </div>
               )}
-
               {msg.role === "ai" && loading && i === chat.length - 1 && (
                 <span className="inline-block w-2 h-4 bg-gray-400 animate-pulse ml-1 rounded-sm align-middle" />
               )}
-
               {!msg.text && msg.attachedFile && (
                 <div className="px-4 py-3 opacity-75 italic text-xs">
                   Analyze this PDF
@@ -363,12 +384,11 @@ export default function ChatPage() {
             </div>
           </div>
         ))}
+
         {uploading && (
-          <>
-            <div className="text-yellow-400 text-center text-xs animate-pulse">
-              uploading file...
-            </div>
-          </>
+          <div className="text-yellow-400 text-center text-xs animate-pulse">
+            uploading file...
+          </div>
         )}
         <div ref={bottomRef}></div>
       </div>
