@@ -1,20 +1,33 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
-import { FiSend, FiUpload, FiFile, FiX } from "react-icons/fi";
+import {
+  FiSend,
+  FiUpload,
+  FiFile,
+  FiX,
+  FiPlus,
+  FiGlobe,
+  FiSearch,
+} from "react-icons/fi";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { FaRegCopy } from "react-icons/fa";
 import { FaCopy } from "react-icons/fa6";
+import Features from "@/component/Features";
 
 type Chat = {
   role: "user" | "ai";
   text: string;
   attachedFile?: string;
   contextUsed?: boolean;
+  webSearch?: boolean;
+  sources?: { title: string; url: string }[];
 };
+
+type Mode = "none" | "pdf" | "websearch";
 
 function getOrCreateSessionId(): string {
   if (typeof window === "undefined") return crypto.randomUUID();
@@ -123,15 +136,17 @@ export default function ChatPage() {
   const [error, setError] = useState("");
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [sessionId, setSessionId] = useState<string>("");
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [mode, setMode] = useState<Mode>("none");
 
   const hasLoadedRef = useRef(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const chatRef = useRef<Chat[]>([]);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setSessionId(getOrCreateSessionId());
   }, []);
-
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chat, loading]);
@@ -139,32 +154,38 @@ export default function ChatPage() {
   useEffect(() => {
     if (hasLoadedRef.current) return;
     hasLoadedRef.current = true;
-    const savedChat = localStorage.getItem("chat_history");
-    if (savedChat) {
+    const saved = localStorage.getItem("chat_history");
+    if (saved) {
       try {
-        const parsed = JSON.parse(savedChat);
-        chatRef.current = parsed;
-        setChat(parsed);
+        const p = JSON.parse(saved);
+        chatRef.current = p;
+        setChat(p);
       } catch {
         localStorage.removeItem("chat_history");
       }
     }
   }, []);
 
+  useEffect(() => {
+    const h = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node))
+        setMenuOpen(false);
+    };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, []);
+
   const uploadFileToServer = async (file: File): Promise<boolean> => {
     setUploading(true);
     setError("");
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("sessionId", sessionId);
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("sessionId", sessionId);
     try {
-      const res = await fetch("/api/upload", {
-        method: "POST",
-        body: formData,
-      });
+      const res = await fetch("/api/upload", { method: "POST", body: fd });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Upload failed");
-      setUploadedFiles((prev) => [...prev, file.name]);
+      setUploadedFiles((p) => [...p, file.name]);
       return true;
     } catch (err: any) {
       setError(err.message);
@@ -179,6 +200,7 @@ export default function ChatPage() {
 
     const userMessage = message.trim();
     const fileToUpload = pendingFile;
+    const isWebSearch = mode === "websearch";
 
     setMessage("");
     setError("");
@@ -188,22 +210,22 @@ export default function ChatPage() {
       role: "user",
       text: userMessage,
       attachedFile: fileToUpload?.name,
+      webSearch: isWebSearch,
     };
-
-    const historyBeforeThisMessage = [...chatRef.current];
+    const historyBefore = [...chatRef.current];
     chatRef.current = [...chatRef.current, userBubble];
     setChat([...chatRef.current]);
     setLoading(true);
 
     let uploadedFileName: string | undefined;
     if (fileToUpload) {
-      const success = await uploadFileToServer(fileToUpload);
-      if (success) {
+      const ok = await uploadFileToServer(fileToUpload);
+      if (ok) {
         uploadedFileName = fileToUpload.name;
       } else {
         chatRef.current = [
           ...chatRef.current,
-          { role: "ai", text: " PDF upload failed. Please try again." },
+          { role: "ai", text: " PDF upload failed." },
         ];
         setChat([...chatRef.current]);
         setLoading(false);
@@ -214,26 +236,25 @@ export default function ChatPage() {
     const aiIndex = chatRef.current.length;
     chatRef.current = [
       ...chatRef.current,
-      { role: "ai", text: "", contextUsed: false },
+      { role: "ai", text: "", contextUsed: false, webSearch: false },
     ];
     setChat([...chatRef.current]);
 
     try {
-      const res = await fetch("/api/chat", {
+      const endpoint = isWebSearch ? "/api/websearch" : "/api/chat";
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           message:
             userMessage ||
-            (uploadedFileName
-              ? `I have uploaded a PDF: ${uploadedFileName}. Please analyze it.`
-              : ""),
+            (uploadedFileName ? `Analyze this PDF: ${uploadedFileName}` : ""),
           sessionId,
           uploadedFiles: uploadedFileName
             ? [...uploadedFiles, uploadedFileName]
             : uploadedFiles,
-          currentFile: uploadedFileName || null, 
-          history: historyBeforeThisMessage.slice(-10),
+          currentFile: uploadedFileName || null,
+          history: historyBefore.slice(-10),
         }),
       });
 
@@ -241,31 +262,40 @@ export default function ChatPage() {
 
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
-      let buffer = "";
-      let streamedText = "";
-      let contextUsed = false;
+      let buffer = "",
+        streamedText = "",
+        contextUsed = false,
+        webSearchUsed = false;
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split("\n");
         buffer = lines.pop() || "";
-
         for (const line of lines) {
           if (!line.startsWith("data: ")) continue;
           const raw = line.slice(6).trim();
           if (raw === "[DONE]") break;
           try {
-            const parsed = JSON.parse(raw);
-            if (parsed.contextUsed !== undefined)
-              contextUsed = parsed.contextUsed;
-            if (parsed.token) {
-              streamedText += parsed.token;
+            const p = JSON.parse(raw);
+            if (p.contextUsed !== undefined) contextUsed = p.contextUsed;
+            if (p.webSearch !== undefined) webSearchUsed = p.webSearch;
+            if (p.sources) {
+              chatRef.current = chatRef.current.map((msg, i) =>
+                i === aiIndex ? { ...msg, sources: p.sources } : msg,
+              );
+            }
+            if (p.token) {
+              streamedText += p.token;
               chatRef.current = chatRef.current.map((msg, i) =>
                 i === aiIndex
-                  ? { ...msg, text: streamedText, contextUsed }
+                  ? {
+                      ...msg,
+                      text: streamedText,
+                      contextUsed,
+                      webSearch: webSearchUsed,
+                    }
                   : msg,
               );
               setChat([...chatRef.current]);
@@ -289,10 +319,10 @@ export default function ChatPage() {
     const file = e.target.files?.[0];
     if (!file) return;
     setPendingFile(file);
+    setMode("pdf");
+    setMenuOpen(false);
     e.target.value = "";
   };
-
-  const removePendingFile = () => setPendingFile(null);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -309,15 +339,14 @@ export default function ChatPage() {
         body: JSON.stringify({ sessionId }),
       }).catch(() => {});
     }
-
     const newId = crypto.randomUUID();
     localStorage.setItem("chatSessionId", newId);
     setSessionId(newId);
-
     chatRef.current = [];
     setChat([]);
     setUploadedFiles([]);
     setPendingFile(null);
+    setMode("none");
     setError("");
     localStorage.removeItem("chat_history");
   };
@@ -326,7 +355,7 @@ export default function ChatPage() {
     <div className="flex flex-col h-[calc(100vh-4.3rem)] md:h-[calc(100vh-4rem)] bg-gradient-to-b from-black via-gray-950 to-black text-white overflow-hidden">
       <div className="flex justify-between items-center w-full flex-shrink-0">
         {chat.length > 0 && (
-          <div className="md:max-w-7xl mx-auto w-full md:px-4 px-2 md:pt-2 pt-1 pb-2 flex flex-wrap gap-2 justify-end">
+          <div className="md:max-w-7xl mx-auto w-full md:px-4 px-2 md:pt-2 pt-1 pb-2 flex gap-2 justify-end">
             <button
               className="px-4 py-2 bg-green-600 hover:bg-green-500 cursor-pointer rounded-lg text-white"
               onClick={startNewChat}
@@ -342,6 +371,9 @@ export default function ChatPage() {
           <div className="text-center mt-32">
             <div className="text-5xl mb-3">🤖</div>
             <p className="text-lg text-gray-300">PDF AI Assistant</p>
+            <p className="text-sm text-gray-600 mt-1">
+              Click + to upload PDF or enable web search
+            </p>
           </div>
         )}
 
@@ -365,20 +397,69 @@ export default function ChatPage() {
                   </span>
                 </div>
               )}
+
               {msg.role === "user" && msg.text && (
                 <div className="px-4 py-3">{msg.text}</div>
               )}
+
+              {msg.role === "user" && msg.webSearch && (
+                <div className="flex  justify-end items-center gap-1 px-4 pb-2 text-xs text-green-300 opacity-80">
+                  <FiGlobe size={10} /> Web Search
+                </div>
+              )}
+              {msg.role === "ai" && msg.webSearch && (
+                <div className="px-4 pt-2 flex items-center gap-1">
+                  <span className="text-xs text-green-400 opacity-70 flex items-center gap-1">
+                    <FiGlobe size={10} /> According to the web search 
+                  </span>
+                </div>
+              )}
+
               {msg.role === "ai" && msg.text && (
                 <div className="px-4 py-3 prose prose-invert prose-sm max-w-none">
                   <MarkdownMessage text={msg.text} />
                 </div>
               )}
+
               {msg.role === "ai" && loading && i === chat.length - 1 && (
                 <span className="inline-block w-2 h-4 bg-gray-400 animate-pulse ml-1 rounded-sm align-middle" />
               )}
+
               {!msg.text && msg.attachedFile && (
                 <div className="px-4 py-3 opacity-75 italic text-xs">
                   Analyze this PDF
+                </div>
+              )}
+
+              {msg.role === "ai" && msg.sources && msg.sources.length > 0 && (
+                <div className="px-4 pb-3 pt-2 flex flex-wrap gap-2 border-t border-gray-700/40">
+                  {msg.sources.map((s, si) => {
+                    let hostname = "";
+                    try {
+                      hostname = new URL(s.url).hostname;
+                    } catch {}
+                    return (
+                      <a
+                        key={si}
+                        href={s.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-1.5 text-xs bg-gray-800 hover:bg-blue-600/20 border border-gray-700 hover:border-blue-500/50 px-2.5 py-1.5 rounded-lg text-gray-400 hover:text-blue-300 transition-all max-w-[180px] group"
+                      >
+                        <img
+                          src={`https://www.google.com/s2/favicons?domain=${hostname}&sz=16`}
+                          className="w-3.5 h-3.5 rounded-sm flex-shrink-0"
+                          alt=""
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).style.display =
+                              "none";
+                          }}
+                        />
+
+                        <span className="truncate">{s.title}</span>
+                      </a>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -393,6 +474,17 @@ export default function ChatPage() {
         <div ref={bottomRef}></div>
       </div>
 
+      {error && (
+        <div className="max-w-7xl mx-auto w-full px-4 mb-2">
+          <div className="bg-red-900/40 border border-red-700/40 text-red-300 text-sm px-4 py-2 rounded-lg flex justify-between">
+            <span>⚠️ {error}</span>
+            <button onClick={() => setError("")}>
+              <FiX size={14} />
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="flex-shrink-0 border-t border-gray-800 bg-gradient-to-b from-black via-gray-950 to-black pt-3">
         <div className="max-w-7xl w-full mx-auto px-4">
           {pendingFile && (
@@ -403,8 +495,11 @@ export default function ChatPage() {
                   {pendingFile.name}
                 </div>
                 <button
-                  onClick={removePendingFile}
-                  className="ml-1 hover:text-red-400 transition-colors cursor-pointer"
+                  onClick={() => {
+                    setPendingFile(null);
+                    setMode("none");
+                  }}
+                  className="ml-1 hover:text-red-400 cursor-pointer"
                 >
                   <FiX size={16} />
                 </button>
@@ -412,41 +507,89 @@ export default function ChatPage() {
             </div>
           )}
 
+          {mode === "websearch" && (
+            <div className="mb-2">
+              <span className="inline-flex items-center gap-2 text-xs bg-green-800/30 border border-green-600/40 px-3 py-2 rounded-lg text-green-300">
+                <FiGlobe size={12} /> Web Search
+                <button
+                  onClick={() => setMode("none")}
+                  className="ml-1 hover:text-red-400 cursor-pointer"
+                >
+                  <FiX size={12} />
+                </button>
+              </span>
+            </div>
+          )}
+
           <div className="flex items-center gap-3">
-            <input
-              type="file"
-              id="pdf-upload"
-              className="hidden"
-              accept=".pdf"
-              onChange={handleFileSelect}
-            />
-            <label
-              htmlFor={loading ? "" : "pdf-upload"}
-              className={`p-3 rounded-xl transition-colors ${
-                loading
-                  ? "bg-gray-700 cursor-not-allowed opacity-50"
-                  : "bg-gray-800 hover:bg-gray-700 cursor-pointer"
-              }`}
-            >
-              <FiUpload size={30} />
-            </label>
+            <div className="relative flex-shrink-0" ref={menuRef}>
+              <button
+                onClick={() => {
+                  if (mode === "none" && !loading) setMenuOpen((p) => !p);
+                }}
+                disabled={loading || mode !== "none"}
+                className={`p-3 rounded-xl transition-colors ${
+                  loading || mode !== "none"
+                    ? "bg-gray-700 opacity-40 cursor-not-allowed"
+                    : menuOpen
+                      ? "bg-blue-600"
+                      : "bg-gray-800 hover:bg-gray-700 cursor-pointer"
+                }`}
+              >
+                <FiPlus
+                  size={24}
+                  style={{
+                    transform: menuOpen ? "rotate(45deg)" : "rotate(0deg)",
+                    transition: "transform 0.2s",
+                  }}
+                />
+              </button>
+
+              {menuOpen && (
+                <Features
+                  onPdfSelect={() => {
+                    document.getElementById("pdf-upload")?.click();
+                    setMenuOpen(false);
+                  }}
+                  onWebSearch={() => {
+                    setMode("websearch");
+                    setMenuOpen(false);
+                  }}
+                />
+              )}
+
+              <input
+                type="file"
+                id="pdf-upload"
+                className="hidden"
+                accept=".pdf"
+                onChange={handleFileSelect}
+              />
+            </div>
 
             <textarea
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder={
-                loading ? "Waiting for response..." : "Ask anything.."
+                loading
+                  ? "Waiting for response..."
+                  : mode === "websearch"
+                    ? "Search the web..."
+                    : mode === "pdf"
+                      ? "Ask about your PDF..."
+                      : "Ask anything.."
               }
               rows={2}
               disabled={loading}
               className="flex-1 scrollbar-hide bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-500 resize-none disabled:opacity-50 disabled:cursor-not-allowed"
             />
 
+            {/* Send */}
             <button
               onClick={sendMessage}
               disabled={loading}
-              className="p-3 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 disabled:cursor-not-allowed transition-colors"
+              className="p-3 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 disabled:cursor-not-allowed transition-colors flex-shrink-0"
             >
               <FiSend size={30} />
             </button>

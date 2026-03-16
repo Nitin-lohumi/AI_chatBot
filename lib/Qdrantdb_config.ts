@@ -21,6 +21,5 @@ export async function ensureCollection() {
       field_name: "source",
       field_schema: "keyword",
     });
-    console.log("✅ Collection + indexes created");
   }
 }
