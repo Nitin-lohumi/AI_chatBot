@@ -370,9 +370,9 @@ export default function ChatPage() {
         {chat.length === 0 && (
           <div className="text-center mt-32">
             <div className="text-5xl mb-3">🤖</div>
-            <p className="text-lg text-gray-300">PDF AI Assistant</p>
+            <p className="text-lg text-gray-300"> AI Assistant</p>
             <p className="text-sm text-gray-600 mt-1">
-              Click + to upload PDF or enable web search
+              let's start chat
             </p>
           </div>
         )}
