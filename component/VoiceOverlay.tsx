@@ -120,7 +120,6 @@ function Session({ onStop }: { onStop: (msgs: VoiceMsg[]) => void }) {
           {state === "connecting" ? "Connecting..." : "Stop"}
         </button>
       </div>
-
     </div>
   );
 }
@@ -163,7 +162,22 @@ export function VoiceOverlay({
         </div>
 
         {error ? (
-          <p className="text-red-400 text-sm text-center py-4">{error}</p>
+          <div className="text-center py-4">
+            <p className="text-red-400 text-sm mb-3">{error}</p>
+            <div className="bg-yellow-900/30 border border-yellow-600/40 rounded-lg px-3 py-3 text-left">
+              <p className="text-yellow-300 text-xs font-medium mb-2">
+                ⚠️ Voice Agent Not Running due to unavability of free tier background services
+              </p>
+              <p className="text-gray-400 text-xs mb-2">
+                Run this in your terminal:
+              </p>
+              <code className="text-green-400 text-xs bg-black/50 px-2 py-1 rounded block">
+                cd livekit-agent
+                <br />
+                python main.py start
+              </code>
+            </div>
+          </div>
         ) : !token ? (
           <p className="text-gray-400 text-sm text-center py-8 animate-pulse">
             Connecting...

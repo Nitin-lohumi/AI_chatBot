@@ -1,5 +1,4 @@
-# 🤖 AI chat bot  with multiple feature
-
+# 🤖 AI chat bot with multiple feature
 
 ---
 
@@ -9,6 +8,7 @@
 - 🔍 **Web Search** — Real-time internet search with clickable source citations
 - 💬 **Simple Chat** — General AI conversation without any mode
 - 📱 **WhatsApp Bot** — Chat with AI directly from WhatsApp (no app needed)
+- 🎤 **Voice Conversation** — Real-time AI voice chat using LiveKit WebRTC
 - 🔒 **Session Isolation** — Every user's data is completely separate
 - ⚡ **Streaming Responses** — Token-by-token real-time answers
 - 🧠 **LangGraph Pipeline** — Stateful AI orchestration (route → retrieve → prompt)
@@ -27,17 +27,20 @@
 | **Qdrant Cloud** | Vector database for PDF storage |
 | **HuggingFace API** | Text embeddings (384-dim) |
 | **Twilio WhatsApp API** | WhatsApp bot integration |
+| **LiveKit Cloud** | WebRTC real-time voice infrastructure |
+| **Deepgram** | Speech to Text (STT) |
+| **Cartesia** | Text to Speech (TTS) |
+| **Silero VAD** | Voice Activity Detection |
+| **livekit-agents SDK** | Python voice agent worker |
 | **pdf-parse** | PDF text extraction |
 | **TypeScript** | Type safety |
 | **Tailwind CSS v4** | UI styling |
 
 ---
 
-
 ## ⚙️ Environment Variables
 
 Create a `.env.local` file in the root:
-
 ```
 QDRANT_API_KEY=***************************
 QDRANT_DB_ENDPOINT=********************************************************
@@ -47,6 +50,20 @@ TAVILY_API_KEY=tvly-***********
 TWILIO_ACCOUNT_SID =********************
 TWILIO_AUTH_TOKEN =***********
 TWILIO_WHATSAPP_FROM=whatsapp:+14155238886
+LIVEKIT_API_KEY=************************************
+LIVEKIT_API_SECRET=************************************
+NEXT_PUBLIC_LIVEKIT_URL=wss://your-project.livekit.cloud
+LIVEKIT_URL=wss://your-project.livekit.cloud
+```
+
+Create a `.env` file inside `livekit-agent/` folder:
+```
+LIVEKIT_URL=wss://your-project.livekit.cloud
+LIVEKIT_API_KEY=************************************
+LIVEKIT_API_SECRET=************************************
+DEEPGRAM_API_KEY=************************************
+GROQ_API_KEY=************************************
+CARTESIA_API_KEY=************************************
 ```
 
 ---
@@ -54,9 +71,8 @@ TWILIO_WHATSAPP_FROM=whatsapp:+14155238886
 ## 🚀 Getting Started
 
 ### 1. Clone & Install
-
 ```bash
-git clone <your-repo-url>
+git clone 
 cd ai_chatbot
 npm install
 ```
@@ -71,14 +87,23 @@ Copy the `.env.local` example above and fill in your API keys.
 - 🔑 HuggingFace: [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens)
 - 🔑 Qdrant: [cloud.qdrant.io](https://cloud.qdrant.io)
 - 🔑 Twilio: [twilio.com](https://twilio.com)
+- 🔑 LiveKit: [cloud.livekit.io](https://cloud.livekit.io)
+- 🔑 Deepgram: [console.deepgram.com](https://console.deepgram.com)
+- 🔑 Cartesia: [cartesia.ai](https://cartesia.ai)
 
 ### 3. Run Development Server
-
 ```bash
 npm run dev
 ```
 
 Open [http://localhost:3000/chat](http://localhost:3000/chat)
+
+### 4. Run Voice Agent (separate terminal)
+```bash
+cd livekit-agent
+pip install -r requirements.txt
+python main.py start
+```
 
 ---
 
@@ -115,6 +140,41 @@ Groq LLM     → generate streaming answer
 5. Groq LLM summarizes results
 6. Answer streams with **clickable source chips** below
 
+---
+
+## 🎤 Voice Conversation — How It Works
+
+1. Click **+** button → **Use Voice**
+2. Voice overlay opens and connects to LiveKit room
+3. AI greets the user automatically
+4. User speaks → Deepgram transcribes speech to text
+5. Groq LLM generates response
+6. Cartesia converts response to audio → plays in browser
+7. Click **Mute** to mute/unmute microphone anytime
+8. Click **Stop** to end the voice session
+
+### Voice Pipeline
+```
+User speaks
+    ↓
+Silero VAD   → detects speech activity
+    ↓
+Deepgram STT → speech to text
+    ↓
+Groq LLM     → generate response
+    ↓
+Cartesia TTS → text to speech
+    ↓
+LiveKit      → streams audio back to browser
+```
+
+### Voice Agent Setup
+```
+livekit-agent/
+├── main.py           ← Python agent worker
+├── requirements.txt  ← Python dependencies
+└── .env              ← Agent environment variables
+```
 
 ---
 
@@ -190,6 +250,7 @@ Every user gets a unique `sessionId` stored in `localStorage`:
 | `/api/websearch` | POST | Real-time Tavily web search |
 | `/api/whatsapp` | POST | Twilio WhatsApp webhook |
 | `/api/clear-context` | POST | Clear session data from Qdrant |
+| `/api/livekit-token` | POST | Generate LiveKit JWT room token |
 
 ---
 
@@ -197,5 +258,3 @@ Every user gets a unique `sessionId` stored in `localStorage`:
 
 **Nitin Lohumi**
 - 📧 lohuminitin@gmail.com
-- 📞 +91 7417696780
-- 📍 Bageshwar, Uttarakhand, India
