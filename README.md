@@ -175,7 +175,21 @@ livekit-agent/
 ├── requirements.txt  ← Python dependencies
 └── .env              ← Agent environment variables
 ```
+### ⚠️ Important Note — Voice Agent
 
+The voice agent runs **locally only**. Free tier cloud platforms (Render, Railway, Koyeb) do not support background worker services without a paid plan.
+
+**To use Voice Conversation feature:**
+1. Clone the repo on your local machine
+2. Run the voice agent locally:
+```bash
+cd livekit-agent
+pip install -r requirements.txt
+python main.py start
+```
+3. The agent connects to LiveKit Cloud — anyone with the web app URL can use voice chat as long as your local agent is running.
+
+> 💡 The Next.js web app can be deployed freely on Render/Vercel. Only the Python voice agent needs to run locally.
 ---
 
 ## 📱 WhatsApp Bot — How It Works
