@@ -9,8 +9,11 @@ function Header() {
           <Link href={"/"}>AI chat Bot</Link>
         </div>
         <nav className="flex gap-1 text-gray-300">
-           <Link href={"/vapiBot"} className="hover:text-white transition">
-            <IoIosChatbubbles  size={25}/>
+          <Link href={"/vapiBot"} className="hover:text-white transition">
+            <IoIosChatbubbles size={25} color="green"/>
+          </Link>
+          <Link href={"/retell"} className="hover:text-white transition">
+            <IoIosChatbubbles size={25}  color="blue"/>
           </Link>
         </nav>
       </div>

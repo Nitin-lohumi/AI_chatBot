@@ -69,11 +69,10 @@ export default function VapiChat() {
   return (
     <div className="flex flex-col h-[calc(100vh-4.3rem)] md:h-[calc(100vh-4rem)] bg-gradient-to-b from-black via-gray-950 to-black text-white overflow-hidden">
       
-      {/* Messages */}
       <div className="flex-1 min-h-0 overflow-y-auto md:max-w-7xl w-full mx-auto flex flex-col gap-3 p-4 scrollbar-hide">
         {messages.length === 0 && (
           <div className="text-center mt-32">
-            <div className="text-5xl mb-3">🎙️</div>
+            <div className="text-5xl mb-3"></div>
             <p className="text-lg text-gray-300">AI Assistant</p>
             <p className="text-sm text-gray-600 mt-1">Type or use voice to start</p>
           </div>
@@ -103,7 +102,6 @@ export default function VapiChat() {
         <div ref={bottomRef} />
       </div>
 
-      {/* Voice status bar */}
       {(connected || connecting) && (
         <div className="flex justify-center mb-2">
           <div className={`inline-flex items-center gap-3 px-5 py-2.5 rounded-full text-sm font-medium transition-all
@@ -113,7 +111,6 @@ export default function VapiChat() {
                 ? "bg-purple-600/30 border border-purple-500/50 text-purple-300"
                 : "bg-green-600/20 border border-green-500/40 text-green-300"}`}>
 
-            {/* Animated bars */}
             <div className="flex items-center gap-0.5">
               {[1, 2, 3, 4].map((i) => (
                 <span
@@ -130,9 +127,7 @@ export default function VapiChat() {
                 />
               ))}
             </div>
-
             {connecting ? "Connecting..." : speaking ? "AI speaking..." : "Listening..."}
-
             {connected && (
               <button
                 onClick={stopVoice}
@@ -145,7 +140,6 @@ export default function VapiChat() {
         </div>
       )}
 
-      {/* Input area */}
       <div className="flex-shrink-0 border-t border-gray-800 bg-gradient-to-b from-black via-gray-950 to-black pt-3 pb-4">
         <div className="md:max-w-7xl w-full mx-auto px-4">
           <div className="flex items-center gap-2">
@@ -193,7 +187,7 @@ export default function VapiChat() {
           </div>
 
           <p className="md:block hidden text-center text-xs text-gray-600 mt-2">
-            Enter to send • 🎤 for voice
+            Enter to send • for voice
           </p>
         </div>
       </div>

@@ -192,7 +192,7 @@ python main.py start
 > 💡 The Next.js web app can be deployed freely on Render/Vercel. Only the Python voice agent needs to run locally.
 ---
 
-## 📱 WhatsApp Bot — How It Works
+##  WhatsApp Bot — How It Works
 
 ### Setup
 
